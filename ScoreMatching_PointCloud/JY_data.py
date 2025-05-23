@@ -1,77 +1,79 @@
+# Get each events particle pid pt eta phi from ROOT file, and convert them to point clouds 
+# From root file to batch = [tensor(shape=(N_1, 3)), tensor(shape=(N_2, 3)), ...]
+
 import uproot
+import awkward as ak
 import numpy as np
-torch
-from torch.utils.data import Dataset, DataLoader
+import torch
+from torch.utils.data import Dataset
 
 class ParticlesPointDataset(Dataset):
-    """
-    PyTorch Dataset for HEP point-cloud events stored in ROOT files.
-    Each event is padded/truncated to `max_particles` and returns:
-      - points: (max_particles, n_features) tensor
-      - mask:   (max_particles,) boolean tensor indicating real entries
-      - pid:    (max_particles,) integer tensor of particle IDs
-    """
-    def __init__(self,
-                 root_files,
-                 tree_name='Events',
-                 features=('pt', 'eta', 'phi'),
-                 max_particles=128,
-                 transform=None):
-        self.features = list(features)
-        self.tree_name = tree_name
-        self.max_particles = max_particles
-        self.transform = transform
+    def __init__(self, rootfile_path):
+        file = uproot.open(rootfile_path) # open the Data ROOT file
+        tree = file["T_Final_Hadron_Dis"] # read the tree from the file
 
-        # Open all ROOT files and get TTree objects
-        self.trees = [uproot.open(f)[self.tree_name] for f in root_files]
-        # Compute cumulative sum of event counts for indexing
-        counts = [t.num_entries for t in self.trees]
-        self.cumsum = np.concatenate(([0], np.cumsum(counts)))
+        pid_array = tree["pid"].arrays(library="ak")["pid"] # return a awkward array, eg.{[p1_1, p2_1, ..., pm_1], [], ... , [p1_n, p2_n, ..., pm_n]} n events, m particles for each event.
+        pt_array = tree["pt"].arrays(library="ak")["pt"]
+        eta_array = tree["eta"].arrays(library="ak")["eta"]
+        phi_array = tree["phi"].arrays(library="ak")["phi"]
 
+        px_array = tree["px"].arrays(library="ak")["px"]
+        py_array = tree["py"].arrays(library="ak")["py"]
+        pz_array = tree["pz"].arrays(library="ak")["pz"]
+
+        self.particles = []
+        self.point_clouds = []
+        
+        # loop events, get pid pt eta phi of every particle in each event
+        for pt_evt, eta_evt, phi_evt, px_evt, py_evt, pz_evt in zip(pt_array, eta_array, phi_array, px_array, py_array, pz_array): 
+            pt_evt = np.array(pt_evt, dtype=np.float32)
+            eta_evt = np.array(eta_evt, dtype=np.float32)
+            phi_evt = np.array(phi_evt, dtype=np.float32)
+            px_evt = np.array(px_evt, dtype=np.float32)
+            py_evt = np.array(py_evt, dtype=np.float32)
+            pz_evt = np.array(pz_evt, dtype=np.float32)
+
+            # for i in range(len(px_evt)):
+            #     self.particles.append(np.array([px_evt[i], py_evt[i]], dtype=np.float32))  # 每个粒子一个样本
+
+            # points = np.stack([pt_evt, eta_evt, phi_evt], axis=-1)  # shape: (N, 3)
+            points = np.stack([px_evt, py_evt], axis=-1)  # shape: (N, 3)
+            # points = np.stack([phi_evt], axis=-1)  # shape: (N, 1)
+            self.point_clouds.append(points)
+
+        # # Step 2: 计算全局 mean 和 std
+        # all_points = np.concatenate(self.point_clouds, axis=0)  # shape: (total_particles, 3)
+        # self.mean = np.mean(all_points, axis=0)  # shape: (3,)
+        # self.std = np.std(all_points, axis=0)    # shape: (3,)
+    
+        # # Step 3: 对每个事件做标准化
+        # self.point_clouds = [(pc - self.mean) / self.std for pc in self.point_clouds]
+    
+        # # Step 4: 保存 mean 和 std（用于 sampling 后反归一化）
+        # np.save("mean.npy", self.mean)
+        # np.save("std.npy", self.std)
+
+    # tell pytorch how many samples in the dataset (how many events)
     def __len__(self):
-        return int(self.cumsum[-1])
+        return len(self.point_clouds)
 
+    # tell pytorch how to get the dataset of idx
     def __getitem__(self, idx):
-        # Locate which file and local event index
-        file_idx = np.searchsorted(self.cumsum, idx, side='right') - 1
-        local_idx = int(idx - self.cumsum[file_idx])
-        tree = self.trees[file_idx]
+        return self.point_clouds[idx]  # (N, 3) np.array
+    
+    # def __len__(self):
+    #     return len(self.particles)
 
-        # Read all features and pid for this single event
-        arr = tree.arrays(self.features + ['pid'],
-                          entry_start=local_idx,
-                          entry_stop=local_idx + 1,
-                          library='np')
-        # Stack feature arrays: shape (n_particles, n_features)
-        pts = np.vstack([arr[f][0] for f in self.features]).T
-        pids = arr['pid'][0]  # shape (n_particles,)
+    # def __getitem__(self, idx):
+    #     return torch.from_numpy(self.particles[idx])  # 单个粒子是 shape=(2,)
+    
 
-        n = pts.shape[0]
-        # Pad or truncate to max_particles
-        if n < self.max_particles:
-            pad_n = self.max_particles - n
-            pts = np.pad(pts, ((0, pad_n), (0, 0)), 'constant', constant_values=0)
-            mask = np.concatenate([np.ones(n, dtype=bool), np.zeros(pad_n, dtype=bool)])
-        else:
-            pts = pts[:self.max_particles]
-            mask = np.ones(self.max_particles, dtype=bool)
+def my_collate_fn(batch):
+    """
+    batch 是一个 list, 包含 batch_size 个事件（每个事件是 shape=(N_i, 4) 的 NumPy array)
+    我们把它变成 list[tensor]，每个 tensor 是 (N_i, 4)，方便送入模型。
+    """
+    return [torch.from_numpy(item) for item in batch]
 
-        sample = {
-            'points': torch.tensor(pts, dtype=torch.float32),
-            'mask': torch.tensor(mask, dtype=torch.bool),
-            'pid': torch.tensor(pids[:self.max_particles], dtype=torch.int64)
-        }
-
-        if self.transform:
-            sample = self.transform(sample)
-        return sample
-
-# Example usage:
-if __name__ == '__main__':
-    files = ['minbias_1.root', 'minbias_2.root']
-    ds = ParticlesPointDataset(files, tree_name='EventTree', max_particles=200)
-    loader = DataLoader(ds, batch_size=8, shuffle=True, num_workers=4)
-    for batch in loader:
-        points, mask, pid = batch['points'], batch['mask'], batch['pid']
-        print(points.shape, mask.shape, pid.shape)
-        break
+# def my_collate_fn(batch):
+#     return torch.stack(batch)
