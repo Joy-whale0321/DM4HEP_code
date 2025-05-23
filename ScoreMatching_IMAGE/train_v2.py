@@ -21,7 +21,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 dataset = PxPyImageDataset(
-    "/mnt/c/Users/12896/Desktop/GeneAI/DM4HEP/Dataset/AMPT_AuAu/GeDataset_fb07_1k.root",
+    # "/mnt/c/Users/12896/Desktop/GeneAI/DM4HEP/Dataset/AMPT_AuAu/GeDataset_fb07_1k.root",
+    "/sphenix/user/jzhang1/ampt23/GeDataset_fb07_1k.root",
     img_size=(60, 60), px_range=(-3, 3), py_range=(-3, 3)
 )
 loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=lambda batch: tuple(zip(*batch)))
