@@ -7,11 +7,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 # ---- HYPERPARAMETERS ----
-EPOCHS = 30
+EPOCHS = 100
 BATCH_SIZE = 16
 LEARNING_RATE = 0.0001
-SIGMA_MIN = 0.1
-SIGMA_MAX = 1.0
+SIGMA_MIN = 0.01
+SIGMA_MAX = 20.0
 
 def get_sigma(t):
     return SIGMA_MIN * (SIGMA_MAX / SIGMA_MIN) ** t
@@ -22,7 +22,7 @@ print("Using device:", device)
 
 dataset = PxPyImageDataset(
     "/mnt/c/Users/12896/Desktop/GeneAI/DM4HEP/Dataset/AMPT_AuAu/GeDataset_fb07_1k.root",
-    img_size=(500, 1000), px_range=(-5, 5), py_range=(-5, 5)
+    img_size=(400, 400), px_range=(-4, 4), py_range=(-4, 4)
 )
 loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=lambda batch: tuple(zip(*batch)))
 
