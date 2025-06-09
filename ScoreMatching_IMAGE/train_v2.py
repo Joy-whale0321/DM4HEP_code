@@ -13,7 +13,7 @@ from Datacheck import save_example_events
 from Datacheck import save_noisy_examples
 
 # ---- HYPERPARAMETERS ----
-EPOCHS = 100
+EPOCHS = 10
 BATCH_SIZE = 16
 LEARNING_RATE = 0.0005
 SIGMA_MIN = 0.1
@@ -55,14 +55,17 @@ for epoch in range(EPOCHS):
     for img_batch, _, _ in loader:
         img = torch.stack(img_batch).to(device)  # (B, 1, H, W)
         B, _, H, W = img.shape
-        # t = torch.rand(B, device=device)
-        t = torch.ones(B, device=device) * 0.3
+        t = torch.rand(B, device=device)
+        # t = torch.ones(B, device=device) * 0.3
         sigma = get_sigma(t).view(B, 1, 1, 1)
 
         noise = sigma * torch.randn((B, 1, H, W), device=device)
         noisy = img + noise
-        score_target = -noise / sigma # ??? -z/sigma ,  torch.randn((B, 1, H, W) / sigma --- noise / sigma^2
+        # img2d = img.repeat(1, 2, 1, 1)  # shape: (B, 2, H, W)
+        # noisy = img2d + noise
 
+        score_target = -noise / (sigma*sigma) # ??? -z/sigma ,  torch.randn((B, 1, H, W) / sigma --- noise / sigma^2
+        
         pred = model(noisy, t.unsqueeze(1)) # ??? t:(B,)->(B,1)
         # loss = F.mse_loss(pred, score_target)
         # == 前景加权 ==
@@ -70,7 +73,7 @@ for epoch in range(EPOCHS):
             foreground = (img > 0).float()  # shape: [B,1,H,W]
             weights = 1.0 + 2.0 * foreground  # 前景加 2 倍权重
 
-        loss = ((pred - score_target) ** 2 * weights).mean()
+        loss = (((pred - score_target) ** 2) * (sigma**2) * weights).mean()
 
         optimizer.zero_grad()
         loss.backward()
@@ -84,6 +87,7 @@ for epoch in range(EPOCHS):
         # print("noise mean:", noise.mean().item(), "std:", noise.std().item())
         # print("score_target mean:", score_target.mean().item(), "std:", score_target.std().item())
 
+        # 1d - image
         fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 
         axs[0].imshow(score_target[0, 0].detach().cpu().numpy(), cmap="coolwarm", origin="lower")
@@ -95,6 +99,22 @@ for epoch in range(EPOCHS):
         plt.tight_layout()
         plt.savefig(f"score_compare/score_epoch{epoch+1}.png")
         plt.close()
+
+        # 2d - image
+        # pred_np = pred[0].detach().cpu().numpy()  # shape: (2, H, W)
+        # plt.figure(figsize=(10, 4))
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(pred_np[0], cmap="coolwarm", origin="lower")
+        # plt.title("Score x-direction")
+
+        # plt.subplot(1, 2, 2)
+        # plt.imshow(pred_np[1], cmap="coolwarm", origin="lower")
+        # plt.title("Score y-direction")
+
+        # plt.tight_layout()
+        # plt.savefig(f"score_compare/score_epoch{epoch+1}.png")
+        # plt.close()
+
         # break
 
     print(f"[Epoch {epoch+1}] Loss: {total_loss:.4f}")
@@ -133,6 +153,8 @@ if EPOCHS > 0:
             B, _, H, W = img.shape
             t = torch.zeros(B, device=device)
             pred = model(img, t.unsqueeze(1))
+            # img2d = img.repeat(1, 2, 1, 1)
+            # pred = model(img2d, t.unsqueeze(1))
             torch.save(pred.cpu(), out_path)
             print(f"Saved final 1D score field to {out_path}")
             break

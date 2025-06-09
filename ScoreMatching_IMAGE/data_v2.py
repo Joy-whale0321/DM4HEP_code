@@ -4,6 +4,7 @@ import awkward as ak
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from scipy.stats import gaussian_kde
 
 class PxPyImageDataset(Dataset):
     def __init__(self, rootfile_path, img_size=(1000, 1000), px_range=(-5, 5), py_range=(-5, 5)):
@@ -35,6 +36,17 @@ class PxPyImageDataset(Dataset):
             py_evt = py_evt[mask]
 
             # print(f"px range: {px_evt.min()} ~ {px_evt.max()}, py range: {py_evt.min()} ~ {py_evt.max()}")
+
+            # samples = np.vstack([px_evt, py_evt])
+            # kde = gaussian_kde(samples, bw_method='scott')
+
+            # x = np.linspace(self.px_min, self.px_max, self.img_size[0])
+            # y = np.linspace(self.py_min, self.py_max, self.img_size[1])
+            # xx, yy = np.meshgrid(x, y)
+            # H = kde(np.vstack([xx.ravel(), yy.ravel()])).reshape(self.img_size)
+            # H = np.log1p(H).astype(np.float32)
+
+            # self.images.append((H, x, y))
 
             H, xedges, yedges = np.histogram2d(
                 px_evt, py_evt,

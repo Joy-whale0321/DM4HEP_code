@@ -2,11 +2,17 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
-score = torch.load("score_vector_output.pt")[0, 0].numpy()
-H, W = score.shape
-Y, X = np.mgrid[0:H:5, 0:W:5]
-U = score[::5, ::5]  # 假设你当前只有一个方向分量（伪装成 U）
-V = np.zeros_like(U)  # 没有第二个分量就设为 0
-plt.quiver(X, Y, U, V, angles='xy', scale_units='xy', scale=1, color='red')
-plt.title("Score Vector Field (Pseudo-1D)")
+score = torch.load("score_vector_output.pt")  # shape: (B, 2, H, W)
+score_np = score[0].numpy()  # (2, H, W)
+
+U = score_np[0]
+V = score_np[1]
+H, W = U.shape
+X, Y = np.meshgrid(np.arange(W), np.arange(H))
+
+plt.figure(figsize=(6, 6))
+plt.quiver(X, Y, U, V, scale=10, angles="xy")
+plt.gca().invert_yaxis()
+plt.title("Final Score Vector Field")
+plt.savefig("final_score_vector.png")
 plt.show()

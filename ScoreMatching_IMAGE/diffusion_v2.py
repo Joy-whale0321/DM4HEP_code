@@ -7,13 +7,13 @@ from pathlib import Path
 
 # ---------------- CONFIG ----------------
 BATCH_SIZE = 1
-IMG_SIZE = (64, 64)
+IMG_SIZE = (32, 32)
 STEPS = 20                # 扩散步数，从 t=1.0 到 t≈0
 DT = 1e-3                 # Langevin 步长
 SIGMA_MIN = 0.1
 SIGMA_MAX = 4.0
 SAVE_DIR = "sample_output"
-MODEL_PATH = "scoreNET/score_model_epoch700.pth"
+MODEL_PATH = "scoreNET/score_model_epoch1000.pth"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)

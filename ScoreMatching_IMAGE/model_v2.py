@@ -22,7 +22,7 @@ class ScoreNetImage(nn.Module):
         self.time_mlp = TimeEmbedding(time_emb_dim)
 
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=5, padding=2),
+            nn.Conv2d(img_channels, 16, kernel_size=5, padding=2),
             nn.ReLU(),
             nn.MaxPool2d(2),
             nn.Conv2d(16, 32, kernel_size=5, padding=2),
